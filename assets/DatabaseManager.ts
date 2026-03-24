@@ -49,12 +49,41 @@ export class DatabaseManager extends Component {
             error(`❌ 网络错误: ${fullUrl}`);
             callback({ code: -99, msg: '网络错误' });
         };
-        const formData = Object.keys(data).map(key => encodeURIComponent(key) + '=' + encodeURIComponent(data[key])).join('&');
-        xhr.send(formData);
+        xhr.send();
     }
+    private getRequest(url: string, callback: (response: any) => void) {
 
+
+        const fullUrl = API_BASE_URL + url;
+        log(`📡 GET请求: ${fullUrl}`);
+        
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', fullUrl, true);
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 4) {
+                log(`📥 响应[${xhr.status}]: ${xhr.responseText}`);
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const res = JSON.parse(xhr.responseText);
+                        callback(res);
+                    } catch (e) {
+                        error("❌ JSON解析失败：", e);
+                        callback({ code: -99, msg: '解析失败' });
+                    }
+                } else {
+                    error(`❌ 请求失败：${xhr.status}`);
+                    callback({ code: -99, msg: `请求失败：${xhr.status}` });
+                }
+            }
+        };
+        xhr.onerror = () => {
+            error(`❌ 网络错误: ${fullUrl}`);
+            callback({ code: -99, msg: '网络错误' });
+        };
+        xhr.send();
+    }
     /** 检查账号是否存在 */
-    checkAccountExist(account: string, callback: (exist: boolean) => void) {
+    send(account: string, callback: (exist: boolean) => void) {
         this.postRequest('check_account.php', { account }, (res) => {
             if (res.code !== 0) { callback(false); return; }
             callback(res.exist);

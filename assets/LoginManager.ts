@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Label, EditBox, Button, Sprite, SpriteFrame, Prefab, sys, log, error, instantiate } from 'cc';
+import { _decorator, Component, Node, Label, EditBox, Button, Sprite, SpriteFrame, Prefab, sys, game, log, error, instantiate, application } from 'cc';
 const { ccclass, property } = _decorator;
 import { director, resources } from 'cc';
 import { DatabaseManager, Race } from './DatabaseManager';
@@ -68,36 +68,59 @@ export class LoginManager extends Component {
     @property(Label) versionLabel: Label = null!;
 
     onLoad() {
-        // 显示版本检查提示
         this.showTip('检查版本中...');
+        this.showTip('sys.isNative: ' + sys.isNative);
+        this.showTip('DatabaseManager.instance: ' + !!DatabaseManager.instance);
         
-        // 调用API检查版本
-        if (sys.isNative && DatabaseManager.instance) {
-            DatabaseManager.instance.checkVersion((latestVersion, minVersion) => {
-                // 比较版本：本地版本 < 最低要求版本则拒绝
-                if (this.compareVersion(this.VERSION, minVersion) < 0) {
-                    this.showTip('版本过低，请更新到: ' + latestVersion);
-                    this.scheduleOnce(() => {
-                        if (sys.isNative) {
-                            application.end();
-                        } else {
-                            window.close?.();
-                        }
-                    }, 5);
+        let versionCheckDone = false;
+        
+        const finishVersionCheck = (latestVersion: string, minVersion: string) => {
+            if (versionCheckDone) return;
+            versionCheckDone = true;
+            this.unschedule(versionCheckTimeout);
+            
+            this.showTip('服务器返回: 最新=' + latestVersion + ', 最低=' + minVersion);
+            this.showTip('本地版本: ' + this.VERSION);
+            
+            if (this.compareVersion(this.VERSION, minVersion) < 0) {
+                this.showTip('版本过低，请更新到: ' + latestVersion);
+                this.scheduleOnce(() => {
+                if (sys.isNative) {
+                    // 桌面 exe 退出
+                    game.end();
                 } else {
-                    // 版本检查通过，初始化游戏
-                    if (this.versionLabel) {
-                        this.versionLabel.string = 'v' + this.VERSION + ' (' + latestVersion + ')';
-                    }
-                    this.initGame();
+                    // 网页关闭窗口
+                    window.close();
                 }
+            }, 5);
+            } else {
+                this.showTip('版本检查通过');
+                if (this.versionLabel) {
+                    this.versionLabel.string = 'v' + this.VERSION + ' (' + latestVersion + ')';
+                }
+                this.initGame();
+            }
+        };
+        
+        const versionCheckTimeout = () => {
+            if (!versionCheckDone) {
+                versionCheckDone = true;
+                this.showTip('版本检查超时，跳过');
+                this.initGame();
+            }
+        };
+        
+        this.scheduleOnce(versionCheckTimeout, 3);
+        
+        if (sys.isNative && DatabaseManager.instance) {
+            this.showTip('开始调用版本检查API...');
+            DatabaseManager.instance.checkVersion((latestVersion, minVersion) => {
+                this.showTip('API返回成功');
+                finishVersionCheck(latestVersion, minVersion);
             });
         } else {
-            // 非原生环境，跳过版本检查
-            if (this.versionLabel) {
-                this.versionLabel.string = 'v' + this.VERSION;
-            }
-            this.initGame();
+            this.showTip('跳过版本检查（非原生环境）');
+            finishVersionCheck('1.0.0', '1.0.0');
         }
     }
 
@@ -131,6 +154,9 @@ export class LoginManager extends Component {
 
         if (this.raceSelector) {
             this.raceSelector.node.on(Button.EventType.CLICK, this.onRaceSelectorClick, this);
+            this.showTip('raceSelector 绑定成功');
+        } else {
+            this.showTip('raceSelector 未绑定');
         }
 
         if (this.raceDropdown) {
@@ -218,12 +244,8 @@ export class LoginManager extends Component {
 
     // 点击种族选择器
     private onRaceSelectorClick(): void {
-        log('点击了种族选择器');
         if (this.raceDropdown) {
             this.raceDropdown.active = !this.raceDropdown.active;
-            log('下拉框状态: ' + this.raceDropdown.active);
-        } else {
-            log('raceDropdown 未绑定');
         }
     }
 
